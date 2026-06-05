@@ -111,6 +111,24 @@ const ensureDCSequenceTable = async () => {
 };
 ensureDCSequenceTable();
 
+const ensureINSequenceTable = async () => {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS in_sequence (
+        id SERIAL PRIMARY KEY,
+        last_number INTEGER DEFAULT 0
+      )
+    `);
+    const res = await pool.query('SELECT COUNT(*) FROM in_sequence');
+    if (parseInt(res.rows[0].count) === 0) {
+      await pool.query('INSERT INTO in_sequence (last_number) VALUES (0)');
+    }
+  } catch (err) {
+    console.error('Error ensuring in_sequence table:', err);
+  }
+};
+ensureINSequenceTable();
+
 const authRoutes = require('./routes/authRoutes');
 app.use('/api/auth', authRoutes);
 
@@ -140,8 +158,37 @@ app.get('/check', (req, res) => {
   res.json({ status: 'OK', message: 'Server is running' });
 });
 
-// ✅ GET DYNAMIC DC NUMBER
+// ✅ GET DYNAMIC DC NUMBER (PREVIEW)
 app.get('/api/dc-number', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT last_number + 1 AS next_number FROM dc_sequence');
+    const nextNumber = result.rows[0].next_number;
+    
+    const date = new Date();
+    const currentYear = date.getFullYear();
+    const currentMonth = date.getMonth(); // 0-indexed, 3 is April
+    
+    let fyStart, fyEnd;
+    if (currentMonth >= 3) {
+      fyStart = currentYear;
+      fyEnd = currentYear + 1;
+    } else {
+      fyStart = currentYear - 1;
+      fyEnd = currentYear;
+    }
+    
+    const fyString = `${fyStart}-${String(fyEnd).slice(-2)}`;
+    const formatted = `DC/${fyString}/${String(nextNumber).padStart(3, '0')}`;
+    
+    res.json({ dcNumber: formatted });
+  } catch (err) {
+    console.error('Error getting DC number preview:', err);
+    res.status(500).json({ error: 'Failed to preview DC number' });
+  }
+});
+
+// ✅ GENERATE DYNAMIC DC NUMBER (ON SUBMIT)
+app.post('/api/dc-number', async (req, res) => {
   try {
     const result = await pool.query('UPDATE dc_sequence SET last_number = last_number + 1 RETURNING last_number');
     const nextNumber = result.rows[0].last_number;
@@ -166,6 +213,64 @@ app.get('/api/dc-number', async (req, res) => {
   } catch (err) {
     console.error('Error generating DC number:', err);
     res.status(500).json({ error: 'Failed to generate DC number' });
+  }
+});
+
+// ✅ GET DYNAMIC IN NUMBER (PREVIEW)
+app.get('/api/in-number', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT last_number + 1 AS next_number FROM in_sequence');
+    const nextNumber = result.rows[0].next_number;
+    
+    const date = new Date();
+    const currentYear = date.getFullYear();
+    const currentMonth = date.getMonth(); // 0-indexed, 3 is April
+    
+    let fyStart, fyEnd;
+    if (currentMonth >= 3) {
+      fyStart = currentYear;
+      fyEnd = currentYear + 1;
+    } else {
+      fyStart = currentYear - 1;
+      fyEnd = currentYear;
+    }
+    
+    const fyString = `${fyStart}-${String(fyEnd).slice(-2)}`;
+    const formatted = `IN/${fyString}/${String(nextNumber).padStart(2, '0')}`;
+    
+    res.json({ inNumber: formatted });
+  } catch (err) {
+    console.error('Error getting IN number preview:', err);
+    res.status(500).json({ error: 'Failed to preview IN number' });
+  }
+});
+
+// ✅ GENERATE DYNAMIC IN NUMBER (ON SUBMIT)
+app.post('/api/in-number', async (req, res) => {
+  try {
+    const result = await pool.query('UPDATE in_sequence SET last_number = last_number + 1 RETURNING last_number');
+    const nextNumber = result.rows[0].last_number;
+    
+    const date = new Date();
+    const currentYear = date.getFullYear();
+    const currentMonth = date.getMonth(); // 0-indexed, 3 is April
+    
+    let fyStart, fyEnd;
+    if (currentMonth >= 3) {
+      fyStart = currentYear;
+      fyEnd = currentYear + 1;
+    } else {
+      fyStart = currentYear - 1;
+      fyEnd = currentYear;
+    }
+    
+    const fyString = `${fyStart}-${String(fyEnd).slice(-2)}`;
+    const formatted = `IN/${fyString}/${String(nextNumber).padStart(2, '0')}`;
+    
+    res.json({ inNumber: formatted });
+  } catch (err) {
+    console.error('Error generating IN number:', err);
+    res.status(500).json({ error: 'Failed to generate IN number' });
   }
 });
 

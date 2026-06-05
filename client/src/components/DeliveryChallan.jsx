@@ -15,7 +15,8 @@ const DeliveryChallan = ({
   stateName,
   returnable,
   items,
-  tools
+  tools,
+  employeeName
 }) => {
   const totalQuantity = items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
   const totalAmount = items.reduce((sum, item) => sum + (Number(item.price) || 0), 0);
@@ -133,41 +134,49 @@ const DeliveryChallan = ({
           SUBJECTED TO HUBBALLI JURIDICTION
         </p>
 
-        {/* 🔥 RETURNABLE */}
+        {/* 🔥 CONDITIONAL BIG TITLE */}
+        {!returnable && (
+          <h2 style={{ textAlign: "center", margin: "10px 0", letterSpacing: "2px", textDecoration: "underline" }}>
+            MATERIAL INDENT
+          </h2>
+        )}
 
-        <div
-          style={{
-            border: "1px solid black",
-            padding: "4px",
-            fontSize: "10px",
-            marginBottom: "4px"
-          }}
-        >
-
-          <label>
-            <input
-              type="checkbox"
-              checked={returnable}
-              readOnly
-            />
-
-            {" "}Returnable
-          </label>
-
-          <label
+        {/* 🔥 RETURNABLE (Only for Challan) */}
+        {returnable && (
+          <div
             style={{
-              marginLeft: "20px"
+              border: "1px solid black",
+              padding: "4px",
+              fontSize: "10px",
+              marginBottom: "4px"
             }}
           >
-            <input
-              type="checkbox"
-              checked={!returnable}
-              readOnly
-            />
 
-            {" "}Non-Returnable
-          </label>
-        </div>
+            <label>
+              <input
+                type="checkbox"
+                checked={returnable}
+                readOnly
+              />
+
+              {" "}Returnable
+            </label>
+
+            <label
+              style={{
+                marginLeft: "20px"
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={!returnable}
+                readOnly
+              />
+
+              {" "}Non-Returnable
+            </label>
+          </div>
+        )}
 
         {/* 🔥 FROM TO */}
 
@@ -230,7 +239,7 @@ const DeliveryChallan = ({
 
             <p style={{ margin: "1px 0" }}>
               <strong>
-                DC No:
+                {!returnable ? "Indent No:" : "DC No:"}
               </strong>{" "}
 
               {dcNumber}
@@ -244,29 +253,33 @@ const DeliveryChallan = ({
               {formatDate(new Date())}
             </p>
 
-            <p style={{ margin: "1px 0" }}>
-              <strong>
-                PO #:
-              </strong>{" "}
+            {returnable && (
+              <>
+                <p style={{ margin: "1px 0" }}>
+                  <strong>
+                    PO #:
+                  </strong>{" "}
 
-              {poNumber}
-            </p>
+                  {poNumber}
+                </p>
 
-            <p style={{ margin: "1px 0" }}>
-              <strong>
-                PO Date:
-              </strong>{" "}
+                <p style={{ margin: "1px 0" }}>
+                  <strong>
+                    PO Date:
+                  </strong>{" "}
 
-              {formatDate(poDate)}
-            </p>
+                  {formatDate(poDate)}
+                </p>
 
-            <p style={{ margin: "1px 0" }}>
-              <strong>
-                State:
-              </strong>{" "}
+                <p style={{ margin: "1px 0" }}>
+                  <strong>
+                    State:
+                  </strong>{" "}
 
-              {stateName}
-            </p>
+                  {stateName}
+                </p>
+              </>
+            )}
           </div>
 
           {/* 🔥 TO */}
@@ -287,27 +300,40 @@ const DeliveryChallan = ({
               To
             </h4>
 
-            <p style={{ margin: "1px 0" }}>
-              <strong>
-                {clientName}
-              </strong>
-            </p>
+            {!returnable ? (
+              <>
+                <p style={{ margin: "1px 0", fontSize: "14px", marginTop: "10px" }}>
+                  <strong>Internal Department / Employee</strong>
+                </p>
+                <p style={{ margin: "1px 0", fontSize: "14px", marginTop: "10px" }}>
+                  Name: <strong>{employeeName || clientName}</strong>
+                </p>
+              </>
+            ) : (
+              <>
+                <p style={{ margin: "1px 0" }}>
+                  <strong>
+                    {clientName}
+                  </strong>
+                </p>
 
-            <p style={{ margin: "1px 0" }}>
-              {clientAddress}
-            </p>
+                <p style={{ margin: "1px 0" }}>
+                  {clientAddress}
+                </p>
 
-            <p style={{ margin: "1px 0" }}>
-              Kind Attn:
-              {" "}
-              {attentionPerson}
-            </p>
+                <p style={{ margin: "1px 0" }}>
+                  Kind Attn:
+                  {" "}
+                  {attentionPerson}
+                </p>
 
-            <p style={{ margin: "1px 0" }}>
-              Phone:
-              {" "}
-              {phone}
-            </p>
+                <p style={{ margin: "1px 0" }}>
+                  Phone:
+                  {" "}
+                  {phone}
+                </p>
+              </>
+            )}
           </div>
         </div>
 

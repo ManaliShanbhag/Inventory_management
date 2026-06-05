@@ -1214,6 +1214,7 @@ const ManagerPage = () => {
 
                     <tr>
                       <th>DC Number</th>
+                      <th>Type</th>
                       <th>Employee</th>
                       <th>Tools & Qty</th>
                       <th>Date</th>
@@ -1252,6 +1253,19 @@ const ManagerPage = () => {
                             <td>
                               <span style={{ fontWeight: "bold", color: "var(--accent-primary)" }}>
                                 {group.dc_number}
+                              </span>
+                            </td>
+
+                            <td>
+                              <span style={{ 
+                                padding: "4px 8px", 
+                                borderRadius: "4px", 
+                                fontSize: "11px", 
+                                fontWeight: "bold",
+                                backgroundColor: group.items[0]?.returnable === false ? "rgba(245, 158, 11, 0.2)" : "rgba(59, 130, 246, 0.2)",
+                                color: group.items[0]?.returnable === false ? "var(--warning)" : "var(--accent-primary)"
+                              }}>
+                                {group.items[0]?.returnable === false ? "Indent" : "Challan"}
                               </span>
                             </td>
 

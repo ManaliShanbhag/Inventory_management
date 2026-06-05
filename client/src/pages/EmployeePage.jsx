@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 
 import { getTools } from "../services/toolService";
 
@@ -32,6 +32,20 @@ const EmployeePage = ({ user }) => {
 
   const [showDropdown, setShowDropdown] =
     useState(false);
+
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setShowDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
   const [selectedDropdownTool,
     setSelectedDropdownTool] =
@@ -147,11 +161,11 @@ const EmployeePage = ({ user }) => {
   });
 
   // 🔥 CLEAR FORM
-  const handleClearForm = () => {
+  const handleClearForm = (targetView = view) => {
     setItems([]);
     setSearchTerm("");
     setSelectedDropdownTool(null);
-    fetchDCNumber();
+    fetchDCNumber(targetView);
     setClientName("");
     setClientAddress("");
     setAttentionPerson("");
@@ -194,6 +208,12 @@ const EmployeePage = ({ user }) => {
   const handleSearchReturnDC = async () => {
     if (!returnSearchDC.trim()) return;
 
+    if (returnSearchDC.trim().toUpperCase().startsWith("IN/")) {
+      alert("Indents cannot be returned. Please enter a valid Delivery Challan Number.");
+      setReturnItems([]);
+      return;
+    }
+
     try {
       // 1. Fetch all return requests
       const allReturnReqs = await getReturnRequests();
@@ -222,6 +242,12 @@ const EmployeePage = ({ user }) => {
         r.dc_number?.toLowerCase() === returnSearchDC.toLowerCase() &&
         r.status === "approved"
       );
+
+      if (matched.length > 0 && matched[0].returnable === false) {
+        alert("This is a Non-Returnable Material Indent. Items cannot be returned.");
+        setReturnItems([]);
+        return;
+      }
 
       if (matched.length === 0) {
         const anyExists = requests.some(r => r.dc_number?.toLowerCase() === returnSearchDC.toLowerCase());
@@ -297,15 +323,18 @@ const EmployeePage = ({ user }) => {
     fetchDCNumber();
   }, []);
 
-  async function fetchDCNumber() {
+  async function fetchDCNumber(targetView = view) {
     try {
-      const res = await fetch(`http://${window.location.hostname}:5000/api/dc-number`);
+      const endpoint = targetView === "indent" ? "in-number" : "dc-number";
+      const res = await fetch(`http://${window.location.hostname}:5000/api/${endpoint}`);
       const data = await res.json();
       if (data.dcNumber) {
         setDcNumber(data.dcNumber);
+      } else if (data.inNumber) {
+        setDcNumber(data.inNumber);
       }
     } catch (err) {
-      console.error("Error fetching DC number:", err);
+      console.error(`Error fetching number for ${targetView}:`, err);
     }
   }
 
@@ -386,7 +415,7 @@ const EmployeePage = ({ user }) => {
       invoiceWindow.document.write(`
         <html>
           <head>
-            <title>Delivery Challan</title>
+            <title>${req.returnable === false ? "Material Indent" : "Delivery Challan"}</title>
             <style>
               body {
                 font-family: Arial;
@@ -491,40 +520,26 @@ const EmployeePage = ({ user }) => {
       return;
     }
 
-    if (!clientName.trim()) {
+    if (view !== "indent") {
+      if (!clientName.trim()) {
+        alert("Please enter client name");
+        return;
+      }
 
-      alert(
-        "Please enter client name"
-      );
+      if (!clientAddress.trim()) {
+        alert("Please enter client address");
+        return;
+      }
 
-      return;
-    }
+      if (!attentionPerson.trim()) {
+        alert("Please enter attention person");
+        return;
+      }
 
-    if (!clientAddress.trim()) {
-
-      alert(
-        "Please enter client address"
-      );
-
-      return;
-    }
-
-    if (!attentionPerson.trim()) {
-
-      alert(
-        "Please enter attention person"
-      );
-
-      return;
-    }
-
-    if (!phone.trim()) {
-
-      alert(
-        "Please enter phone number"
-      );
-
-      return;
+      if (!phone.trim()) {
+        alert("Please enter phone number");
+        return;
+      }
     }
 
     if (items.length === 0) {
@@ -590,6 +605,19 @@ const EmployeePage = ({ user }) => {
     }
 
     try {
+      let finalNumber = dcNumber;
+      try {
+        const endpoint = view === "indent" ? "in-number" : "dc-number";
+        const res = await fetch(`http://${window.location.hostname}:5000/api/${endpoint}`, { method: "POST" });
+        const data = await res.json();
+        if (data.dcNumber) {
+          finalNumber = data.dcNumber;
+        } else if (data.inNumber) {
+          finalNumber = data.inNumber;
+        }
+      } catch (err) {
+        console.error("Failed to generate final number", err);
+      }
 
       // 🔥 CREATE REQUESTS
       for (const item of items) {
@@ -610,17 +638,17 @@ const EmployeePage = ({ user }) => {
 
           is_printed: false,
 
-          dc_number: dcNumber,
+          dc_number: finalNumber,
 
-          client_name: clientName,
+          client_name: view === "indent" ? user.name : clientName,
 
           client_address:
-            clientAddress,
+            view === "indent" ? "Internal Department" : clientAddress,
 
           attention_person:
-            attentionPerson,
+            view === "indent" ? user.name : attentionPerson,
 
-          phone: phone,
+          phone: view === "indent" ? "" : phone,
 
           po_number: poNumber,
 
@@ -628,7 +656,7 @@ const EmployeePage = ({ user }) => {
 
           state: stateName,
 
-          returnable: returnable,
+          returnable: view === "indent" ? false : returnable,
 
           price: Number(item.price) || 0,
 
@@ -659,23 +687,27 @@ const EmployeePage = ({ user }) => {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "32px" }}>
         <h1 style={{ margin: 0, fontSize: "32px" }}>Employee Dashboard</h1>
         <div style={{ display: "flex", gap: "12px" }}>
-          {view === "dashboard" ? (
-            <button
-              onClick={() => setView("returns")}
-              className="btn-primary"
-              style={{ background: "var(--success)", padding: "10px 20px" }}
-            >
-              🔄 Go to Return Center
-            </button>
-          ) : (
-            <button
-              onClick={() => setView("dashboard")}
-              className="btn-secondary"
-              style={{ padding: "10px 20px" }}
-            >
-              ⬅️ Back to Dashboard
-            </button>
-          )}
+          <button
+            onClick={() => { setView("dashboard"); handleClearForm("dashboard"); }}
+            className={view === "dashboard" ? "btn-primary" : "btn-secondary"}
+            style={{ padding: "10px 20px", border: "none" }}
+          >
+            📄 Delivery Challan
+          </button>
+          <button
+            onClick={() => { setView("indent"); handleClearForm("indent"); setReturnable(false); }}
+            className={view === "indent" ? "btn-primary" : "btn-secondary"}
+            style={{ padding: "10px 20px", background: view === "indent" ? "var(--warning)" : undefined, color: view === "indent" ? "#fff" : undefined, border: "none" }}
+          >
+            📦 Material Indent
+          </button>
+          <button
+            onClick={() => setView("returns")}
+            className={view === "returns" ? "btn-primary" : "btn-secondary"}
+            style={{ padding: "10px 20px", background: view === "returns" ? "var(--success)" : undefined, color: view === "returns" ? "#fff" : undefined, border: "none" }}
+          >
+            🔄 Return Center
+          </button>
           <span style={{
             background: "rgba(255,255,255,0.05)",
             padding: "8px 16px",
@@ -732,7 +764,7 @@ const EmployeePage = ({ user }) => {
         </div>
       )}
 
-      {view === "dashboard" && (
+      {(view === "dashboard" || view === "indent") && (
         <div className="dashboard-view">
           <div className="dashboard-grid">
 
@@ -743,7 +775,7 @@ const EmployeePage = ({ user }) => {
                 <h3>Select Tools</h3>
 
                 {/* 🔥 SEARCH */}
-
+                <div ref={dropdownRef}>
                 <input
                   type="text"
 
@@ -830,6 +862,7 @@ const EmployeePage = ({ user }) => {
                       ))}
                   </div>
                 )}
+                </div>
 
                 {selectedDropdownTool && (
                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: "var(--text-secondary)", marginTop: "10px", marginBottom: "4px" }}>
@@ -972,184 +1005,183 @@ const EmployeePage = ({ user }) => {
             {/* 🔥 DELIVERY DETAILS */}
             <div className="glass-panel">
 
-              <h3>Delivery Challan Details</h3>
+              <h3>{view === "indent" ? "Material Indent Details" : "Delivery Challan Details"}</h3>
 
-              <select
-                value={selectedClientDropdown}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setSelectedClientDropdown(val);
-                  if (val === "NEW_CLIENT") {
-                    setClientName("");
-                    setClientAddress("");
-                    setAttentionPerson("");
-                    setPhone("");
-                    setStateName("");
-                  } else {
-                    const client = uniqueClients.find(c => c.client_name === val);
-                    if (client) {
-                      setClientName(client.client_name || "");
-                      setClientAddress(client.client_address || "");
-                      setAttentionPerson(client.attention_person || "");
-                      setPhone(client.phone || "");
-                      setStateName(client.state || "");
-                    } else {
-                      setClientName("");
-                      setClientAddress("");
-                      setAttentionPerson("");
-                      setPhone("");
-                      setStateName("");
-                    }
-                  }
-                }}
-                style={{ width: "100%", padding: "8px", marginBottom: "10px" }}
-              >
-                <option value="">-- Select Existing Client --</option>
-                <option value="NEW_CLIENT">+ Add New Client (Manual Entry)</option>
-                {uniqueClients.map((client, idx) => (
-                  <option key={idx} value={client.client_name}>{client.client_name}</option>
-                ))}
-              </select>
+              {view !== "indent" ? (
+                <>
+                  <select
+                    value={selectedClientDropdown}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setSelectedClientDropdown(val);
+                      if (val === "NEW_CLIENT") {
+                        setClientName("");
+                        setClientAddress("");
+                        setAttentionPerson("");
+                        setPhone("");
+                        setStateName("");
+                      } else {
+                        const client = uniqueClients.find(c => c.client_name === val);
+                        if (client) {
+                          setClientName(client.client_name || "");
+                          setClientAddress(client.client_address || "");
+                          setAttentionPerson(client.attention_person || "");
+                          setPhone(client.phone || "");
+                          setStateName(client.state || "");
+                        } else {
+                          setClientName("");
+                          setClientAddress("");
+                          setAttentionPerson("");
+                          setPhone("");
+                          setStateName("");
+                        }
+                      }
+                    }}
+                    style={{ width: "100%", padding: "8px", marginBottom: "10px" }}
+                  >
+                    <option value="">-- Select Existing Client --</option>
+                    <option value="NEW_CLIENT">+ Add New Client (Manual Entry)</option>
+                    {uniqueClients.map((client, idx) => (
+                      <option key={idx} value={client.client_name}>{client.client_name}</option>
+                    ))}
+                  </select>
 
-              <input
-                type="text"
-                placeholder="Generating DC Number..."
-                value={dcNumber}
-                readOnly
-                style={{
-                  width: "100%",
-                  padding: "8px",
-                  marginBottom: "10px",
-                  backgroundColor: "#e9ecef",
-                  cursor: "not-allowed",
-                  fontWeight: "bold",
-                  color: "#495057",
-                  boxSizing: "border-box"
-                }}
-              />
+                  <input
+                    type="text"
+                    placeholder="Generating DC Number..."
+                    value={dcNumber}
+                    readOnly
+                    style={{
+                      width: "100%",
+                      padding: "8px",
+                      marginBottom: "10px",
+                      backgroundColor: "#e9ecef",
+                      cursor: "not-allowed",
+                      fontWeight: "bold",
+                      color: "#495057",
+                      boxSizing: "border-box"
+                    }}
+                  />
 
-              <input
-                type="text"
-                placeholder="Client Name"
-                value={clientName}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setClientName(val);
-                  const exists = uniqueClients.some(c => c.client_name === val);
-                  setSelectedClientDropdown(exists ? val : (val === "" ? "" : "NEW_CLIENT"));
-                }}
-                style={{
-                  width: "100%",
-                  padding: "8px",
-                  marginBottom: "10px"
-                }}
-              />
+                  <input
+                    type="text"
+                    placeholder="Client Name"
+                    value={clientName}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setClientName(val);
+                      const exists = uniqueClients.some(c => c.client_name === val);
+                      setSelectedClientDropdown(exists ? val : (val === "" ? "" : "NEW_CLIENT"));
+                    }}
+                    style={{
+                      width: "100%",
+                      padding: "8px",
+                      marginBottom: "10px"
+                    }}
+                  />
 
-              <textarea
-                placeholder="Client Address"
-                value={clientAddress}
-                onChange={(e) =>
-                  setClientAddress(
-                    e.target.value
-                  )
-                }
-                rows="4"
-                style={{
-                  width: "100%",
-                  padding: "8px",
-                  marginBottom: "10px"
-                }}
-              />
+                  <textarea
+                    placeholder="Client Address"
+                    value={clientAddress}
+                    onChange={(e) => setClientAddress(e.target.value)}
+                    rows="4"
+                    style={{
+                      width: "100%",
+                      padding: "8px",
+                      marginBottom: "10px"
+                    }}
+                  />
 
-              <input
-                type="text"
-                placeholder="Attention Person"
-                value={attentionPerson}
-                onChange={(e) =>
-                  setAttentionPerson(
-                    e.target.value
-                  )
-                }
-                style={{
-                  width: "100%",
-                  padding: "8px",
-                  marginBottom: "10px"
-                }}
-              />
+                  <input
+                    type="text"
+                    placeholder="Attention Person"
+                    value={attentionPerson}
+                    onChange={(e) => setAttentionPerson(e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "8px",
+                      marginBottom: "10px"
+                    }}
+                  />
 
-              <input
-                type="text"
-                placeholder="Phone"
-                value={phone}
-                onChange={(e) =>
-                  setPhone(
-                    e.target.value
-                  )
-                }
-                style={{
-                  width: "100%",
-                  padding: "8px",
-                  marginBottom: "10px"
-                }}
-              />
+                  <input
+                    type="text"
+                    placeholder="Phone"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "8px",
+                      marginBottom: "10px"
+                    }}
+                  />
+                </>
+              ) : (
+                <>
+                  <div style={{ marginBottom: "16px", padding: "12px", background: "rgba(255,255,255,0.05)", borderRadius: "8px" }}>
+                    <p style={{ margin: "0 0 8px 0", color: "var(--text-secondary)", fontSize: "12px" }}>Indent Number</p>
+                    <p style={{ margin: 0, fontWeight: "bold", fontSize: "16px", color: "var(--accent-primary)" }}>{dcNumber}</p>
+                  </div>
+                  <div style={{ marginBottom: "16px", padding: "12px", background: "rgba(255,255,255,0.05)", borderRadius: "8px" }}>
+                    <p style={{ margin: "0 0 8px 0", color: "var(--text-secondary)", fontSize: "12px" }}>Requested By</p>
+                    <p style={{ margin: 0, fontWeight: "bold", fontSize: "16px" }}>{user?.name}</p>
+                  </div>
+                </>
+              )}
 
-              <input
-                type="text"
-                placeholder="PO Number"
-                value={poNumber}
-                onChange={(e) =>
-                  setPoNumber(
-                    e.target.value
-                  )
-                }
-                style={{
-                  width: "100%",
-                  padding: "8px",
-                  marginBottom: "10px"
-                }}
-              />
+              {view !== "indent" && (
+                <>
+                  <input
+                    type="text"
+                    placeholder="PO Number"
+                    value={poNumber}
+                    onChange={(e) => setPoNumber(e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "8px",
+                      marginBottom: "10px"
+                    }}
+                  />
 
-              <input
-                type="date"
-                placeholder="PO Date"
-                value={poDate}
-                onChange={(e) =>
-                  setPoDate(
-                    e.target.value
-                  )
-                }
-                style={{
-                  width: "100%",
-                  padding: "8px",
-                  marginBottom: "10px"
-                }}
-              />
+                  <input
+                    type="date"
+                    placeholder="PO Date"
+                    value={poDate}
+                    onChange={(e) => setPoDate(e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "8px",
+                      marginBottom: "10px"
+                    }}
+                  />
 
-              <select
-                value={stateName}
-                onChange={(e) => setStateName(e.target.value)}
-                style={{
-                  width: "100%",
-                  padding: "10px",
-                  borderRadius: "6px",
-                  marginBottom: "12px",
-                  background: "var(--bg-secondary)",
-                  color: "var(--text-primary)",
-                  border: "1px solid var(--border-color)"
-                }}
-              >
-                <option value="">-- Select State --</option>
-                {INDIAN_STATES.map((state) => (
-                  <option key={state} value={state}>
-                    {state}
-                  </option>
-                ))}
-              </select>
+                  <select
+                    value={stateName}
+                    onChange={(e) => setStateName(e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "10px",
+                      borderRadius: "6px",
+                      marginBottom: "12px",
+                      background: "var(--bg-secondary)",
+                      color: "var(--text-primary)",
+                      border: "1px solid var(--border-color)"
+                    }}
+                  >
+                    <option value="">-- Select State --</option>
+                    {INDIAN_STATES.map((state) => (
+                      <option key={state} value={state}>
+                        {state}
+                      </option>
+                    ))}
+                  </select>
+                </>
+              )}
 
 
               <label
                 style={{
-                  display: "flex",
+                  display: view === "indent" ? "none" : "flex",
                   alignItems: "center",
                   gap: "8px",
                   marginBottom: "20px"
@@ -1274,7 +1306,7 @@ const EmployeePage = ({ user }) => {
                                 className="btn-success"
                                 style={{ padding: "6px 12px", fontSize: "12px", whiteSpace: "nowrap" }}
                               >
-                                Generate Invoice
+                                {firstReq?.returnable === false ? "Print Indent" : "Generate Invoice"}
                               </button>
                             )}
 
@@ -1366,6 +1398,7 @@ const EmployeePage = ({ user }) => {
               : []
           }
           tools={tools}
+          employeeName={user?.name}
         />
       </div>
 

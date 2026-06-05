@@ -7,12 +7,12 @@ import logo from "./assets/armtronix-logo.png";
 
 function App() {
   const [user, setUser] = useState(() => {
-    const savedUser = localStorage.getItem("user");
+    const savedUser = sessionStorage.getItem("user");
     return savedUser ? JSON.parse(savedUser) : null;
   });
 
   const handleLogout = () => {
-    localStorage.removeItem("user");
+    sessionStorage.removeItem("user");
     setUser(null);
   };
 
@@ -20,7 +20,7 @@ function App() {
     return (
       <LoginPage
         onLogin={(userData) => {
-          localStorage.setItem("user", JSON.stringify(userData));
+          sessionStorage.setItem("user", JSON.stringify(userData));
           setUser(userData);
         }}
       />
